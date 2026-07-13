@@ -5,7 +5,7 @@ import type { AgentEvent } from "@/src/types/agent-events";
 export interface ChatMessage {
   id: string;
   streamId: string;
-  role: "assistant";
+  role: "user" | "assistant";
   content: string;
   isStreaming: boolean;
 }
@@ -62,6 +62,24 @@ export const useAgentStore = create<AgentState>((set) => ({
   },
 }));
 
+function appendUserMessage(
+  state: AgentState,
+  event: Extract<AgentEvent, { type: "USER_MESSAGE_SENT" }>,
+): Partial<AgentState> {
+  return {
+    messages: [
+      ...state.messages,
+      {
+        id: event.id,
+        streamId: event.id,
+        role: "user",
+        content: event.content,
+        isStreaming: false,
+      },
+    ],
+  };
+}
+
 function reduceEvent(state: AgentState, event: AgentEvent): Partial<AgentState> {
   switch (event.type) {
     case "TOKEN_APPENDED":
@@ -85,6 +103,8 @@ function reduceEvent(state: AgentState, event: AgentEvent): Partial<AgentState> 
       };
     case "CONNECTION_CHANGED":
       return { connected: event.connected };
+    case "USER_MESSAGE_SENT":
+      return appendUserMessage(state, event);
   }
 }
 

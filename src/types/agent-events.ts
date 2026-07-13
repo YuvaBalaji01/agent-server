@@ -65,7 +65,16 @@ export interface ErrorOccurredEvent {
   message: string;
 }
 
+export interface UserMessageSentEvent {
+  type: "USER_MESSAGE_SENT";
+
+  id: string;
+
+  content: string;
+}
+
 export type AgentEvent =
+  | UserMessageSentEvent
   | TokenAppendedEvent
   | ToolCallStartedEvent
   | ToolCallCompletedEvent

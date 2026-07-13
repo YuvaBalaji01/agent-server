@@ -80,6 +80,26 @@ describe("agentStore", () => {
     ]);
   });
 
+  it("adds a user message immediately", () => {
+    const store = useAgentStore.getState();
+
+    store.dispatch({
+      type: "USER_MESSAGE_SENT",
+      id: "user-1",
+      content: "Hello assistant",
+    });
+
+    expect(useAgentStore.getState().messages).toEqual([
+      {
+        id: "user-1",
+        streamId: "user-1",
+        role: "user",
+        content: "Hello assistant",
+        isStreaming: false,
+      },
+    ]);
+  });
+
   it("replaces context snapshots and appends errors", () => {
     const store = useAgentStore.getState();
     store.dispatch({
