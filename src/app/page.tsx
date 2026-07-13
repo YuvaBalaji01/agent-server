@@ -1,37 +1,14 @@
 "use client";
 
-import { useEffect } from "react";
-import { wsManager } from "../lib/websocket";
+import { ChatPanel } from "@/src/components/chat";
+import { useAgentClient } from "@/src/hooks/useAgentClient";
 
 export default function Home() {
-  useEffect(() => {
-    wsManager.connect();
-
-    wsManager.onMessage((msg) => {
-      console.log("Received:", msg);
-    });
-
-    return () => {
-      wsManager.disconnect();
-    };
-  }, []);
+  useAgentClient();
 
   return (
-    <main
-      style={{
-        padding: 40,
-        fontFamily: "sans-serif",
-      }}
-    >
-      <h1>Agent Console</h1>
-
-      <button
-        onClick={() => {
-          wsManager.sendUserMessage("Hello Agent");
-        }}
-      >
-        Send Message
-      </button>
+    <main className="h-full min-h-0 flex-1 bg-slate-50 dark:bg-slate-950">
+      <ChatPanel />
     </main>
   );
 }
