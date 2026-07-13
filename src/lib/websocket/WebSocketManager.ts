@@ -49,7 +49,9 @@ export class WebSocketManager {
 
         console.log("📩", message);
 
-        this.messageHandlers.forEach((handler) => handler(message));
+        for (const handler of [...this.messageHandlers]) {
+          handler(message);
+        }
       } catch (err) {
         console.error("Invalid message", err);
       }
@@ -105,15 +107,29 @@ export class WebSocketManager {
     this.send(msg);
   }
 
-  onMessage(handler: MessageHandler) {
+  onMessage(handler: MessageHandler): () => void {
     this.messageHandlers.push(handler);
+
+    return () => {
+      this.messageHandlers = this.messageHandlers.filter(
+        (registeredHandler) => registeredHandler !== handler,
+      );
+    };
   }
 
-  onConnectionChange(handler: ConnectionHandler) {
+  onConnectionChange(handler: ConnectionHandler): () => void {
     this.connectionHandlers.push(handler);
+
+    return () => {
+      this.connectionHandlers = this.connectionHandlers.filter(
+        (registeredHandler) => registeredHandler !== handler,
+      );
+    };
   }
 
   private notifyConnection(state: boolean) {
-    this.connectionHandlers.forEach((handler) => handler(state));
+    for (const handler of [...this.connectionHandlers]) {
+      handler(state);
+    }
   }
 }
