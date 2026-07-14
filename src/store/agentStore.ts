@@ -35,18 +35,27 @@ export interface AgentState {
   toolCalls: ToolCallState[];
   contextSnapshot: ContextSnapshot | null;
   errors: AgentError[];
+  timeline: TimelineEvent[];
   dispatch: (event: AgentEvent) => void;
   reset: () => void;
 }
 
+export interface TimelineEvent {
+  id: string;
+  type: string;
+  timestamp: number;
+  details: Record<string, unknown>;
+}
+
 function createInitialState(): Pick<
   AgentState,
-  "connected" | "messages" | "toolCalls" | "contextSnapshot" | "errors"
+  "connected" | "messages" | "toolCalls" | "contextSnapshot" | "errors" | "timeline"
 > {
   return {
     connected: false,
     messages: [],
     toolCalls: [],
+    timeline: [],
     contextSnapshot: null,
     errors: [],
   };
@@ -55,8 +64,11 @@ function createInitialState(): Pick<
 export const useAgentStore = create<AgentState>((set) => ({
   ...createInitialState(),
   dispatch: (event) => {
-    set((state) => reduceEvent(state, event));
-  },
+  set((state) => ({
+    ...reduceEvent(state, event),
+    ...appendTimeline(state, event),
+  }));
+},
   reset: () => {
     set(createInitialState());
   },
@@ -75,6 +87,23 @@ function appendUserMessage(
         role: "user",
         content: event.content,
         isStreaming: false,
+      },
+    ],
+  };
+}
+
+function appendTimeline(
+  state: AgentState,
+  event: AgentEvent,
+): Partial<AgentState> {
+  return {
+    timeline: [
+      ...state.timeline,
+      {
+        id: crypto.randomUUID(),
+        type: event.type,
+        timestamp: Date.now(),
+        details: event,
       },
     ],
   };
