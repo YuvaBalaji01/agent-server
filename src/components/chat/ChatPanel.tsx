@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-
+import { ToolPanel } from "./ToolPanel";
 import type { WebSocketManager } from "@/src/lib/websocket/WebSocketManager";
 import { useAgentStore } from "@/src/store/agentStore";
 import { ChatInput } from "./ChatInput";
@@ -29,6 +29,7 @@ export function ChatPanel({ webSocketManager }: ChatPanelProps) {
           <div ref={bottomRef} />
         </div>
       </div>
+      <ToolPanel/>
       <div className="sticky bottom-0">
         <ChatInput webSocketManager={webSocketManager} />
       </div>
