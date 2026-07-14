@@ -6,6 +6,7 @@ import type { WebSocketManager } from "@/src/lib/websocket/WebSocketManager";
 import { useAgentStore } from "@/src/store/agentStore";
 import { ChatInput } from "./ChatInput";
 import { ChatMessage } from "./ChatMessage";
+import { ContextInspector } from "./ContextInspector";
 
 interface ChatPanelProps {
   webSocketManager?: WebSocketManager;
@@ -30,6 +31,7 @@ export function ChatPanel({ webSocketManager }: ChatPanelProps) {
         </div>
       </div>
       <ToolPanel/>
+      <ContextInspector />
       <div className="sticky bottom-0">
         <ChatInput webSocketManager={webSocketManager} />
       </div>
