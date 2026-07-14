@@ -150,7 +150,7 @@ function appendToken(
       messages: [
         ...state.messages,
         {
-          id: event.streamId,
+          id: crypto.randomUUID(),
           streamId: event.streamId,
           role: "assistant",
           content: event.token,
