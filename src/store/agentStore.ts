@@ -43,11 +43,25 @@ export interface AgentError {
   message: string;
 }
 
-export interface TimelineEvent {
+export interface ConversationTrace {
   id: string;
-  type: string;
+
+  userMessage: string;
+
+  toolCalls: {
+    name: string;
+    status: "running" | "completed";
+  }[];
+
+  contextUpdated: boolean;
+
+  streamedTokens: number;
+
+  response: string;
+
+  finished: boolean;
+
   timestamp: number;
-  details: Record<string, unknown>;
 }
 
 export interface AgentState {
@@ -56,7 +70,7 @@ export interface AgentState {
   toolCalls: ToolCallState[];
   contextSnapshot: ContextSnapshot | null;
   errors: AgentError[];
-  timeline: TimelineEvent[];
+  timeline: ConversationTrace[];
   dispatch: (event: AgentEvent) => void;
   reset: () => void;
 }
@@ -80,7 +94,7 @@ export const useAgentStore = create<AgentState>((set) => ({
   dispatch: (event) => {
     set((state) => ({
       ...reduceEvent(state, event),
-      ...appendTimeline(state, event),
+      ...updateConversationTrace(state, event),
     }));
   },
   reset: () => {
@@ -112,19 +126,93 @@ function appendUserMessage(
   };
 }
 
-function appendTimeline(state: AgentState, event: AgentEvent): Partial<AgentState> {
-  return {
-    timeline: [
-      ...state.timeline,
-      {
-        id: crypto.randomUUID(),
-        type: event.type,
+function updateConversationTrace(
+  state: AgentState,
+  event: AgentEvent,
+): Partial<AgentState> {
+  const timeline = [...state.timeline];
+
+  switch (event.type) {
+    case "USER_MESSAGE_SENT": {
+      timeline.push({
+        id: event.id,
+        userMessage: event.content,
+        response: "",
+        streamedTokens: 0,
+        toolCalls: [],
+        contextUpdated: false,
+        finished: false,
         timestamp: Date.now(),
-        details: event,
-      },
-    ],
-  };
+      });
+
+      return { timeline };
+    }
+
+    case "TOKEN_APPENDED": {
+      const current = [...timeline].reverse().find((c) => !c.finished);
+
+      if (!current) return {};
+
+      current.response += event.token;
+      current.streamedTokens++;
+
+      return { timeline };
+    }
+
+    case "TOOL_CALL_STARTED": {
+      const current = [...timeline].reverse().find((c) => !c.finished);
+
+      if (!current) return {};
+
+      current.toolCalls.push({
+        name: event.toolName,
+        status: "running",
+      });
+
+      return { timeline };
+    }
+
+    case "TOOL_CALL_COMPLETED": {
+      const current = [...timeline].reverse().find((c) => !c.finished);
+
+      if (!current) return {};
+
+      const tool = current.toolCalls.find(
+        (t) => t.name === event.toolName,
+      );
+
+      if (tool) {
+        tool.status = "completed";
+      }
+
+      return { timeline };
+    }
+
+    case "CONTEXT_UPDATED": {
+      const current = [...timeline].reverse().find((c) => !c.finished);
+
+      if (!current) return {};
+
+      current.contextUpdated = true;
+
+      return { timeline };
+    }
+
+    case "STREAM_FINISHED": {
+      const current = [...timeline].reverse().find((c) => !c.finished);
+
+      if (!current) return {};
+
+      current.finished = true;
+
+      return { timeline };
+    }
+
+    default:
+      return {};
+  }
 }
+
 
 function reduceEvent(state: AgentState, event: AgentEvent): Partial<AgentState> {
   switch (event.type) {
