@@ -5,8 +5,16 @@ interface ToolCardProps {
 }
 
 export function ToolCard({ tool }: ToolCardProps) {
+  const isRunning = tool.status === "running";
+
   return (
-    <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-900">
+    <div
+      className={`rounded-xl border p-4 ${
+        isRunning
+          ? "border-yellow-300 bg-slate-50 ring-2 ring-yellow-200 dark:border-yellow-700 dark:bg-slate-900 dark:ring-yellow-900"
+          : "border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-900"
+      }`}
+    >
       <div className="flex items-center justify-between">
         <h3 className="font-semibold text-sm">
           🔧 {tool.toolName}
