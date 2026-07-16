@@ -50,6 +50,7 @@ export class EventProcessor {
         this.handleContextSnapshot(message);
         return;
       case "STREAM_END":
+        console.log("EventProcessor got STREAM_END");
         this.handleStreamEnd(message);
         return;
       case "ERROR":

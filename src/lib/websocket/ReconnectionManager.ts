@@ -11,6 +11,8 @@ export class ReconnectionManager {
       10000,
     );
 
+    console.log("hi");
+
     this.reconnectTimer = setTimeout(() => {
       this.attempts++;
       callback();

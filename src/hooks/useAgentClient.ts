@@ -1,5 +1,4 @@
 import { useEffect, useMemo } from "react";
-
 import { EventProcessor } from "@/src/lib/websocket/EventProcessor";
 import { ReconnectionManager } from "@/src/lib/websocket/ReconnectionManager";
 import { SequenceBuffer } from "@/src/lib/websocket/SequenceBuffer";
@@ -35,14 +34,28 @@ export function useAgentClient(
 
     const unsubscribeMessages = client.webSocketManager.onMessage((message) => {
       const orderedMessages = client.sequenceBuffer.push(message);
-
+      let shouldReset = false;
       for (const orderedMessage of orderedMessages) {
+        const streamId =
+          "stream_id" in orderedMessage
+            ? orderedMessage.stream_id
+            : "NO_STREAM";
+
+        console.log(
+          "PROCESSING:",
+          streamId,
+          orderedMessage.type,
+          orderedMessage.seq
+        );
         client.eventProcessor.process(orderedMessage);
 
-        // Reset after an entire assistant response finishes.
         if (orderedMessage.type === "STREAM_END") {
-          client.sequenceBuffer.reset();
+          shouldReset = true;
         }
+      }
+
+      if (shouldReset) {
+        client.sequenceBuffer.reset();
       }
     });
 
@@ -51,13 +64,22 @@ export function useAgentClient(
         useAgentStore
           .getState()
           .dispatch({ type: "CONNECTION_CHANGED", connected });
-
+        // if (client.sequenceBuffer.hasActiveStream) {
+        //   console.log(
+        //     "⚠ Connection lost during active stream:",
+        //     client.sequenceBuffer.currentStreamId,
+        //   );
+        // }
+        if (client.sequenceBuffer.hasActiveStream) console.log("active");
+        else console.log("not active");
         if (connected) {
           reconnectManager.reset();
-
-          client.webSocketManager.sendResume(
-            client.sequenceBuffer.lastProcessedSeq,
-          );
+          console.log(client.sequenceBuffer.lastProcessedSeq)
+          if (client.sequenceBuffer.lastContentSeq > 0) {
+            client.webSocketManager.sendResume(
+              client.sequenceBuffer.lastContentSeq,
+            );
+          }
 
           return;
         }

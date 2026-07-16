@@ -9,8 +9,26 @@ import type { ServerMessage } from "@/src/types/protocol";
  */
 export class SequenceBuffer {
   private readonly pending = new Map<number, ServerMessage>();
-
+  private activeStreamId: string | null = null;
   private processedSequence: number;
+  private lastRecoverableSeq = 0;
+  private lastContentSequence = 0;
+
+  get lastContentSeq(): number {
+    return this.lastContentSequence;
+  }
+
+  get lastResumeSeq() {
+    return this.lastRecoverableSeq;
+  }
+
+  get hasActiveStream(): boolean {
+    return this.activeStreamId !== null;
+  }
+
+  get currentStreamId(): string | null {
+    return this.activeStreamId;
+  }
 
   constructor(lastProcessedSeq = 0) {
     if (!Number.isSafeInteger(lastProcessedSeq) || lastProcessedSeq < 0) {
@@ -60,9 +78,36 @@ export class SequenceBuffer {
     const ready: ServerMessage[] = [];
     let nextMessage = this.pending.get(this.nextExpectedSeq);
 
+    // while (nextMessage !== undefined) {
+    //   this.pending.delete(nextMessage.seq);
+    //   this.processedSequence = nextMessage.seq;
+    //   if (nextMessage.type === "TOKEN") {
+    //     this.activeStreamId = nextMessage.stream_id;
+    //   }
+
+    //   if (nextMessage.type === "STREAM_END") {
+    //     this.activeStreamId = null;
+    //   }
+    //   if (nextMessage.type !== "PING") {
+    //     this.lastRecoverableSeq = nextMessage.seq;
+    //   }
+    //   ready.push(nextMessage);
+    //   nextMessage = this.pending.get(this.nextExpectedSeq);
+    // }
+
     while (nextMessage !== undefined) {
       this.pending.delete(nextMessage.seq);
       this.processedSequence = nextMessage.seq;
+
+      if (
+        nextMessage.type === "TOKEN" ||
+        nextMessage.type === "TOOL_CALL" ||
+        nextMessage.type === "TOOL_RESULT" ||
+        nextMessage.type === "STREAM_END"
+      ) {
+        this.lastContentSequence = nextMessage.seq;
+      }
+
       ready.push(nextMessage);
       nextMessage = this.pending.get(this.nextExpectedSeq);
     }

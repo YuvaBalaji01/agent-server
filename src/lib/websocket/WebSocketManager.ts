@@ -48,7 +48,7 @@ export class WebSocketManager {
         const message = JSON.parse(event.data) as ServerMessage;
 
         console.log("📩", message);
-
+        console.log("RAW", message);
         for (const handler of [...this.messageHandlers]) {
           handler(message);
         }
