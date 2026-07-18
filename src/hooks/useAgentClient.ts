@@ -28,33 +28,151 @@ export function useAgentClient(
   const client = dependencies ?? defaultDependencies;
 
   useEffect(() => {
+    // Tracks the stream currently being processed.
+    let currentStreamId: string | null = null;
+
+    // Timer associated with the current stream.
+    let responseTimer: ReturnType<typeof setTimeout> | null = null;
+
+    // Increase this if your server normally needs more time.
+    const RESPONSE_TIMEOUT = 20000;
+
+    const clearResponseTimer = () => {
+      if (responseTimer) {
+        clearTimeout(responseTimer);
+        responseTimer = null;
+      }
+    };
+
+    const startResponseTimer = (streamId: string) => {
+      clearResponseTimer();
+
+      console.log(
+        "⏱ Starting response timer for stream:",
+        streamId,
+      );
+
+      responseTimer = setTimeout(() => {
+        if (currentStreamId !== streamId) {
+          return;
+        }
+
+        console.log(
+          "⚠️ Response timeout. STREAM_END not received for stream:",
+          streamId,
+        );
+
+        const lastSeq = client.sequenceBuffer.lastContentSeq;
+
+        if (lastSeq > 0) {
+          console.log(
+            "🔄 Sending RESUME after response timeout:",
+            streamId,
+            "from seq:",
+            lastSeq,
+          );
+
+          client.webSocketManager.sendResume(lastSeq);
+        }
+      }, RESPONSE_TIMEOUT);
+    };
+
     const unsubscribeEvents = client.eventProcessor.subscribe((event) => {
       useAgentStore.getState().dispatch(event);
     });
 
     const unsubscribeMessages = client.webSocketManager.onMessage((message) => {
       const orderedMessages = client.sequenceBuffer.push(message);
+
       let shouldReset = false;
+
       for (const orderedMessage of orderedMessages) {
         const streamId =
           "stream_id" in orderedMessage
             ? orderedMessage.stream_id
-            : "NO_STREAM";
+            : null;
 
         console.log(
           "PROCESSING:",
-          streamId,
+          streamId ?? "NO_STREAM",
           orderedMessage.type,
-          orderedMessage.seq
+          orderedMessage.seq,
         );
-        client.eventProcessor.process(orderedMessage);
 
-        if (orderedMessage.type === "STREAM_END") {
-          shouldReset = true;
+        /*
+         * Detect the active response stream.
+         *
+         * We start tracking when the first stream-specific content
+         * message arrives.
+         */
+        if (
+          streamId &&
+          (
+            orderedMessage.type === "TOKEN" ||
+            orderedMessage.type === "TOOL_CALL" ||
+            orderedMessage.type === "TOOL_RESULT"
+          )
+        ) {
+          if (currentStreamId === null) {
+            currentStreamId = streamId;
+
+            console.log(
+              "🟢 Active stream started:",
+              currentStreamId,
+            );
+
+            startResponseTimer(currentStreamId);
+          }
         }
+
+        /*
+         * STREAM_END must belong to the currently active stream.
+         */
+        if (orderedMessage.type === "STREAM_END") {
+          if (orderedMessage.stream_id === currentStreamId) {
+            console.log(
+              "✅ Valid STREAM_END received for:",
+              currentStreamId,
+            );
+
+            // Process STREAM_END so Zustand/UI marks the stream finished.
+            client.eventProcessor.process(orderedMessage);
+
+            // Stop the timeout.
+            clearResponseTimer();
+
+            // Current response is finished.
+            currentStreamId = null;
+
+            // SequenceBuffer can now be reset.
+            shouldReset = true;
+
+            continue;
+          }
+
+          /*
+           * STREAM_END belongs to some other/old stream.
+           * Do not finish the active response.
+           */
+          console.warn(
+            "⚠ Ignoring STREAM_END from unexpected stream:",
+            orderedMessage.stream_id,
+            "Current stream:",
+            currentStreamId,
+          );
+
+          continue;
+        }
+
+        /*
+         * Normal message processing.
+         */
+        client.eventProcessor.process(orderedMessage);
       }
 
       if (shouldReset) {
+        console.log("🔄 Resetting SequenceBuffer");
+
         client.sequenceBuffer.reset();
       }
     });
@@ -63,19 +181,30 @@ export function useAgentClient(
       client.webSocketManager.onConnectionChange((connected) => {
         useAgentStore
           .getState()
-          .dispatch({ type: "CONNECTION_CHANGED", connected });
-        // if (client.sequenceBuffer.hasActiveStream) {
-        //   console.log(
-        //     "⚠ Connection lost during active stream:",
-        //     client.sequenceBuffer.currentStreamId,
-        //   );
-        // }
-        if (client.sequenceBuffer.hasActiveStream) console.log("active");
-        else console.log("not active");
+          .dispatch({
+            type: "CONNECTION_CHANGED",
+            connected,
+          });
+
         if (connected) {
+          console.log("✅ WebSocket reconnected");
+
           reconnectManager.reset();
-          console.log(client.sequenceBuffer.lastProcessedSeq)
-          if (client.sequenceBuffer.lastContentSeq > 0) {
+
+          /*
+           * If a response was interrupted, try to resume it.
+           */
+          if (
+            currentStreamId !== null &&
+            client.sequenceBuffer.lastContentSeq > 0
+          ) {
+            console.log(
+              "🔄 Resuming stream:",
+              currentStreamId,
+              "from seq:",
+              client.sequenceBuffer.lastContentSeq,
+            );
+
             client.webSocketManager.sendResume(
               client.sequenceBuffer.lastContentSeq,
             );
@@ -84,7 +213,24 @@ export function useAgentClient(
           return;
         }
 
+        console.log(
+          "❌ WebSocket disconnected",
+          "Active stream:",
+          currentStreamId,
+        );
+
+        /*
+         * IMPORTANT:
+         * We DO NOT clear currentStreamId here.
+         *
+         * We also DO NOT reset SequenceBuffer.
+         *
+         * This allows the response to continue after reconnect.
+         */
+
         reconnectManager.scheduleReconnect(() => {
+          console.log("🔄 Attempting WebSocket reconnect");
+
           client.webSocketManager.connect();
         });
       });
@@ -97,6 +243,8 @@ export function useAgentClient(
       unsubscribeEvents();
 
       reconnectManager.reset();
+
+      clearResponseTimer();
 
       client.webSocketManager.disconnect();
     };
