@@ -86,23 +86,7 @@ npm run dev
 ![alt text](image.png)
 ![alt text](image-1.png)
 
-### Streamed Response with Tool Call
 
-Add the normal-mode screenshot showing an incrementally streamed assistant response with a tool call rendered inline.
-
-<!-- Example: ![Streamed response with tool call](./screenshots/stream-tool-call.png) -->
-
-### Trace Timeline
-
-Add the screenshot showing the trace timeline with response activity and tool-call status.
-
-<!-- Example: ![Trace timeline](./screenshots/trace-timeline.png) -->
-
-### Context Inspector
-
-Add the screenshot showing the Context Inspector and the required context update/diff view.
-
-<!-- Example: ![Context inspector](./screenshots/context-inspector.png) -->
 
 ## Chaos Mode Recording
 
