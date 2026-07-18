@@ -31,7 +31,7 @@ export interface ToolCallCompletedEvent {
   type: "TOOL_CALL_COMPLETED";
 
   callId: string;
-
+  toolName: string;
   streamId: string;
 
   result: Record<string, unknown>;
