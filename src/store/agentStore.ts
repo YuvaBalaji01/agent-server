@@ -24,6 +24,21 @@ export interface ChatMessage {
   isStreaming: boolean;
 }
 
+export interface AgentState {
+  connected: boolean;
+  messages: ChatMessage[];
+  toolCalls: ToolCallState[];
+  contextSnapshot: ContextSnapshot | null;
+  errors: AgentError[];
+  timeline: ConversationTrace[];
+  dispatch: (event: AgentEvent) => void;
+
+  // NEW
+  discardStream: (streamId: string) => void;
+
+  reset: () => void;
+}
+
 export interface ToolCallState {
   callId: string;
   streamId: string;
@@ -91,12 +106,33 @@ function createInitialState(): Pick<
 
 export const useAgentStore = create<AgentState>((set) => ({
   ...createInitialState(),
+
   dispatch: (event) => {
     set((state) => ({
       ...reduceEvent(state, event),
       ...updateConversationTrace(state, event),
     }));
   },
+
+  // NEW
+  discardStream: (streamId) => {
+    set((state) => ({
+      // Remove the incomplete assistant message
+      messages: state.messages.filter(
+        (message) =>
+          !(
+            message.role === "assistant" &&
+            message.streamId === streamId
+          ),
+      ),
+
+      // Remove tool calls belonging to abandoned stream
+      toolCalls: state.toolCalls.filter(
+        (toolCall) => toolCall.streamId !== streamId,
+      ),
+    }));
+  },
+
   reset: () => {
     set(createInitialState());
   },

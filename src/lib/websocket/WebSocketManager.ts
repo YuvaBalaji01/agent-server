@@ -18,6 +18,10 @@ export class WebSocketManager {
   private messageHandlers: MessageHandler[] = [];
   private connectionHandlers: ConnectionHandler[] = [];
 
+  // Stores the most recently sent user message.
+  // Used to retry when an active response is abandoned.
+  private lastUserMessage: string | null = null;
+
   constructor(url: string) {
     this.url = url;
   }
@@ -48,6 +52,7 @@ export class WebSocketManager {
         const message = JSON.parse(event.data) as ServerMessage;
 
         console.log("📩", message);
+
         for (const handler of [...this.messageHandlers]) {
           handler(message);
         }
@@ -71,11 +76,44 @@ export class WebSocketManager {
   }
 
   sendUserMessage(content: string) {
+    // Remember the message in case the response gets interrupted.
+    this.lastUserMessage = content;
+
     const msg: UserMessage = {
       type: "USER_MESSAGE",
       content,
     };
 
+    this.send(msg);
+  }
+
+  /**
+   * Resends the most recently sent user message.
+   *
+   * Used when:
+   * 1. A response stream starts.
+   * 2. The connection is interrupted.
+   * 3. Server reconnects but has forgotten the old stream.
+   * 4. We abandon the partial response.
+   * 5. We resend the original user request.
+   */
+  resendLastUserMessage(): void {
+    if (this.lastUserMessage === null) {
+      console.warn("⚠️ No user message available to resend");
+      return;
+    }
+
+    console.log(
+      "📤 Resending last user message:",
+      this.lastUserMessage,
+    );
+
+    const msg: UserMessage = {
+      type: "USER_MESSAGE",
+      content: this.lastUserMessage,
+    };
+
+    // Send directly instead of calling sendUserMessage().
     this.send(msg);
   }
 
