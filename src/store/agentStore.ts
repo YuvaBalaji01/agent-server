@@ -331,7 +331,7 @@ function appendToken(
           ...message,
           segments: segments.map((segment, segIndex) =>
             segIndex === segments.length - 1
-              ? { ...segment, content: `${segment.content}${event.token}` }
+              ? { ...segment, content: `${(segment as TextSegment).content}${event.token}` }
               : segment,
           ),
         };
