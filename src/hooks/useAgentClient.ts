@@ -110,39 +110,48 @@ export function useAgentClient(
      */
    const unsubscribeMessages =
   client.webSocketManager.onMessage((message) => {
-    /*
-     * IMPORTANT:
-     * Validate stream-specific messages BEFORE they enter
-     * SequenceBuffer.
-     *
-     * Otherwise an old/incorrect stream message with the same
-     * sequence number can advance the buffer and cause the valid
-     * message to be discarded as a duplicate.
-     */
     const incomingStreamId =
       "stream_id" in message
         ? message.stream_id
         : null;
 
+    const isStreamContent =
+      message.type === "TOKEN" ||
+      message.type === "TOOL_CALL" ||
+      message.type === "TOOL_RESULT";
+
+    const isStreamEnd =
+      message.type === "STREAM_END";
+
     /*
-     * If we already have an active stream, reject messages
-     * belonging to another stream.
+     * ==================================================
+     * VALIDATE STREAM OWNERSHIP BEFORE SequenceBuffer
+     * ==================================================
      *
-     * We specifically protect STREAM_END and stream content here.
+     * An old stream message must NEVER enter the buffer,
+     * because even if we ignore it later, it may already
+     * have advanced processedSequence.
+     *
+     * Example:
+     *
+     * current stream = A
+     *
+     * old STREAM_END seq 24 stream B
+     * valid STREAM_END seq 24 stream A
+     *
+     * If B enters SequenceBuffer first, seq 24 becomes
+     * processed and A's valid STREAM_END is later dropped
+     * as a duplicate.
      */
+
     if (
       currentStreamId !== null &&
       incomingStreamId !== null &&
       incomingStreamId !== currentStreamId &&
-      (
-        message.type === "TOKEN" ||
-        message.type === "TOOL_CALL" ||
-        message.type === "TOOL_RESULT" ||
-        message.type === "STREAM_END"
-      )
+      (isStreamContent || isStreamEnd)
     ) {
       console.warn(
-        "⚠️ Discarding message from unexpected stream BEFORE SequenceBuffer:",
+        "⚠️ Rejecting stale/wrong-stream message BEFORE SequenceBuffer:",
         {
           type: message.type,
           seq: message.seq,
@@ -151,14 +160,12 @@ export function useAgentClient(
         },
       );
 
-      // CRITICAL:
-      // Do not push this message into SequenceBuffer.
       return;
     }
 
     /*
-     * Message is valid for the current stream.
-     * Now it is safe to give it to SequenceBuffer.
+     * Only now is the message allowed to participate
+     * in sequence ordering.
      */
     const orderedMessages =
       client.sequenceBuffer.push(message);
@@ -179,8 +186,11 @@ export function useAgentClient(
       );
 
       /*
-       * Detect stream activity.
+       * ==================================================
+       * START / CONTINUE ACTIVE STREAM
+       * ==================================================
        */
+
       if (
         streamId &&
         (
@@ -189,10 +199,6 @@ export function useAgentClient(
           orderedMessage.type === "TOOL_RESULT"
         )
       ) {
-        /*
-         * No active stream means this is the beginning
-         * of a new response.
-         */
         if (currentStreamId === null) {
           currentStreamId = streamId;
 
@@ -202,34 +208,55 @@ export function useAgentClient(
             "🟢 Active stream started:",
             currentStreamId,
           );
-
-          startResponseTimer(currentStreamId);
         }
 
         /*
-         * Only activity from the CURRENT stream
-         * can restart the inactivity timer.
+         * Defensive validation.
+         *
+         * Normally wrong-stream messages should already
+         * have been rejected before entering SequenceBuffer.
          */
-        if (streamId === currentStreamId) {
-          startResponseTimer(currentStreamId);
+        if (streamId !== currentStreamId) {
+          console.warn(
+            "⚠️ Ignoring unexpected ordered stream message:",
+            {
+              type: orderedMessage.type,
+              seq: orderedMessage.seq,
+              streamId,
+              currentStreamId,
+            },
+          );
+
+          continue;
         }
+
+        /*
+         * Restart inactivity timer only for activity
+         * belonging to the active stream.
+         */
+        startResponseTimer(currentStreamId);
       }
 
       /*
-       * STREAM_END validation.
-       *
-       * This is a second safety check.
-       * Normally invalid STREAM_END messages should already
-       * have been discarded before SequenceBuffer.push().
+       * ==================================================
+       * STREAM_END
+       * ==================================================
        */
+
       if (orderedMessage.type === "STREAM_END") {
+        /*
+         * Only the active stream is allowed to finish.
+         */
         if (
           currentStreamId !== null &&
           orderedMessage.stream_id === currentStreamId
         ) {
           console.log(
-            "✅ Valid STREAM_END received for:",
-            currentStreamId,
+            "✅ Valid STREAM_END received:",
+            {
+              streamId: currentStreamId,
+              seq: orderedMessage.seq,
+            },
           );
 
           client.eventProcessor.process(
@@ -248,19 +275,29 @@ export function useAgentClient(
           continue;
         }
 
+        /*
+         * This should almost never happen now because
+         * wrong-stream STREAM_END was rejected before
+         * SequenceBuffer.
+         */
         console.warn(
-          "⚠️ Ignoring unexpected STREAM_END:",
-          orderedMessage.stream_id,
-          "Current stream:",
-          currentStreamId,
+          "⚠️ Ignoring unexpected ordered STREAM_END:",
+          {
+            streamId: orderedMessage.stream_id,
+            seq: orderedMessage.seq,
+            currentStreamId,
+          },
         );
 
         continue;
       }
 
       /*
-       * Normal processing.
+       * ==================================================
+       * NORMAL MESSAGE
+       * ==================================================
        */
+
       client.eventProcessor.process(
         orderedMessage,
       );
@@ -268,7 +305,7 @@ export function useAgentClient(
 
     if (shouldReset) {
       console.log(
-        "🔄 Resetting SequenceBuffer after STREAM_END",
+        "🔄 Resetting SequenceBuffer after valid STREAM_END",
       );
 
       client.sequenceBuffer.reset();
