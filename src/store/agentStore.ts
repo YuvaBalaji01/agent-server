@@ -64,9 +64,10 @@ export interface ConversationTrace {
   userMessage: string;
 
   toolCalls: {
-    name: string;
-    status: "running" | "completed";
-  }[];
+  callId: string;
+  name: string;
+  status: "running" | "completed";
+}[];
 
   contextUpdated: boolean;
 
@@ -201,28 +202,28 @@ function updateConversationTrace(
       if (!current) return {};
 
       current.toolCalls.push({
-        name: event.toolName,
-        status: "running",
-      });
-
+  callId: event.callId,
+  name: event.toolName,
+  status: "running",
+});
       return { timeline };
     }
 
-    case "TOOL_CALL_COMPLETED": {
-      const current = [...timeline].reverse().find((c) => !c.finished);
+  case "TOOL_CALL_COMPLETED": {
+  const current = [...timeline].reverse().find((c) => !c.finished);
 
-      if (!current) return {};
+  if (!current) return {};
 
-      const tool = current.toolCalls.find(
-        (t) => t.name === event.toolName,
-      );
+  const tool = current.toolCalls.find(
+    (t) => t.callId === event.callId,
+  );
 
-      if (tool) {
-        tool.status = "completed";
-      }
+  if (tool) {
+    tool.status = "completed";
+  }
 
-      return { timeline };
-    }
+  return { timeline };
+}
 
     case "CONTEXT_UPDATED": {
       const current = [...timeline].reverse().find((c) => !c.finished);
