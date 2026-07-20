@@ -54,6 +54,12 @@ Run the provided assignment agent-server locally. The client expects the WebSock
 ```text
 ws://localhost:4747/ws
 ```
+Link for the container : https://github.com/Alchemyst-ai/hiring/tree/main/June-2026_FullStackAI%2Fagent-server
+```bash
+download the folder agent-server 
+cd agent-server 
+docker compose up --build
+```
 
 Make sure the agent-server is running before starting the client.
 
